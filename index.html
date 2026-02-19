@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>萬德莊嚴 - 咒輪念佛</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        :root { --gold: #fbbf24; --bg: #020617; --sun-glow: rgba(251, 191, 36, 0.6); }
+        
+        * { font-family: "PingFang TC", "Heiti TC", "Microsoft JhengHei", sans-serif !important; -webkit-tap-highlight-color: transparent; user-select: none; box-sizing: border-box; touch-action: manipulation; }
+        body { background-color: var(--bg); color: white; margin: 0; padding: 0; overflow: hidden; height: 100vh; width: 100vw; position: fixed; }
+
+        /* 咒輪容器與旋轉 */
+        .wheel-container { position: absolute; transform-origin: center center; pointer-events: none; }
+        .wheel-outer { width: 340px; height: 340px; animation: rotate-cw 120s linear infinite; }
+        .wheel-mid { width: 260px; height: 260px; animation: rotate-cw 80s linear infinite; }
+        .wheel-inner { width: 180px; height: 180px; animation: rotate-cw 40s linear infinite; }
+
+        @keyframes rotate-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* 佛名單位 */
+        .chant-unit { 
+            position: absolute; 
+            left: 50%; 
+            top: 50%; 
+            white-space: nowrap; 
+            font-weight: 900; 
+            transition: color 0.4s ease, filter 0.4s ease, opacity 0.4s ease; 
+            pointer-events: none; 
+            color: rgba(180, 83, 9, 0.25); 
+        }
+
+        /* 點亮狀態修正：不要在此重新定義 transform 以免覆蓋 JS 計算的位置 */
+        .active-unit { 
+            color: var(--gold) !important; 
+            filter: drop-shadow(0 0 8px var(--gold)); 
+            opacity: 1 !important; 
+        }
+
+        /* 點擊特效 */
+        .ripple { position: absolute; border-radius: 50%; border: 2px solid var(--gold); pointer-events: none; z-index: 80; transform: translate(-50%, -50%); animation: ripple-out 1.5s cubic-bezier(0.1, 0, 0.2, 1) forwards; }
+        @keyframes ripple-out { 0% { width: 0; height: 0; opacity: 1; } 100% { width: 600px; height: 600px; opacity: 0; } }
+
+        .sun-flash { position: absolute; border-radius: 50%; background: radial-gradient(circle, var(--sun-glow) 0%, transparent 70%); pointer-events: none; z-index: 70; transform: translate(-50%, -50%); animation: flash-fade 0.8s ease-out forwards; }
+        @keyframes flash-fade { 0% { width: 0; height: 0; opacity: 1; } 100% { width: 300px; height: 300px; opacity: 0; } }
+
+        /* 按鈕樣式 */
+        .sun-button {
+            width: 76px; height: 76px;
+            background: radial-gradient(circle, #fcd34d 0%, #fbbf24 50%, #d97706 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 25px var(--sun-glow);
+            display: flex; align-items: center; justify-content: center;
+            position: relative; transition: transform 0.1s;
+            cursor: pointer; z-index: 500;
+        }
+        .sun-button:active { transform: scale(0.92); }
+
+        .ui-btn { transition: all 0.2s ease; color: #94a3b8; font-weight: bold; font-size: 0.7rem; letter-spacing: 0.1em; padding: 10px; z-index: 500; cursor: pointer; text-align: center; }
+        .ui-btn:active { color: var(--gold); transform: scale(0.9); }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); backdrop-filter: blur(8px); z-index: 2000; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .modal-content { background: #0f172a; border: 1px solid rgba(251,191,36,0.3); border-radius: 24px; padding: 28px; width: 100%; max-width: 320px; position: relative; }
+
+        #notification { position: fixed; top: -100px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.95); color: var(--gold); padding: 10px 24px; border-radius: 99px; font-size: 13px; z-index: 3000; transition: top 0.5s ease; border: 1px solid var(--gold); pointer-events: none; }
+        #notification.show { top: 60px; }
+    </style>
+</head>
+
+<body onpointerdown="app.handleInput(event)">
+
+    <div id="app-root" class="relative h-screen w-screen flex flex-col">
+        <div id="notification">提醒</div>
+
+        <!-- 初始選擇頁 -->
+        <div id="home-view" class="fixed inset-0 z-[1000] flex flex-col items-center justify-center p-8 bg-[#020617]">
+            <div class="mb-10 text-center">
+                <h1 class="text-3xl font-black tracking-[0.6em] text-amber-500 mb-3 ml-[0.6em]">萬德莊嚴</h1>
+                <p class="text-stone-500 text-xs tracking-[0.2em]">專注當下，一心修持</p>
+            </div>
+            <div class="grid grid-cols-1 gap-4 w-full max-w-xs">
+                <button onclick="app.select('南無阿彌陀佛')" class="bg-white/5 border border-amber-900/30 p-5 rounded-2xl active:bg-amber-600/20"><div class="text-amber-500 text-lg font-bold">南無阿彌陀佛</div></button>
+                <button onclick="app.select('南無觀世音菩薩')" class="bg-white/5 border border-white/5 p-5 rounded-2xl active:bg-white/10"><div class="text-amber-500 text-lg font-bold">南無觀世音菩薩</div></button>
+                <button onclick="app.select('南無地藏王菩薩')" class="bg-white/5 border border-white/5 p-5 rounded-2xl active:bg-white/10"><div class="text-amber-500 text-lg font-bold">南無地藏王菩薩</div></button>
+                <button onclick="app.select('嗡嘛呢唄美吽')" class="bg-white/5 border border-white/5 p-5 rounded-2xl active:bg-white/10"><div class="text-amber-500 text-lg font-bold">嗡嘛呢唄美吽</div></button>
+            </div>
+        </div>
+
+        <!-- 練習頁面 -->
+        <div id="practice-ui" class="hidden flex-1 flex flex-col">
+            <div class="flex justify-between items-start p-8 pt-14 pointer-events-none z-[100]">
+                <div>
+                    <h1 id="grade-label" class="text-xl font-black text-amber-500 tracking-widest">下品下生</h1>
+                    <p id="grade-type" class="text-[9px] text-stone-500 mt-1 tracking-[0.1em]">修行境界</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[9px] text-stone-500 tracking-tighter uppercase">今日 / 累計</p>
+                    <p class="text-lg font-bold text-white">
+                        <span id="today-count" class="text-amber-400">0</span>
+                        <span class="mx-1 text-stone-700">/</span>
+                        <span id="total-count">0</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- 咒輪區 -->
+            <main class="flex-1 flex items-center justify-center relative pointer-events-none">
+                <div id="wheel-outer" class="wheel-container wheel-outer"></div>
+                <div id="wheel-mid" class="wheel-container wheel-mid"></div>
+                <div id="wheel-inner" class="wheel-container wheel-inner"></div>
+                <div id="centerMantra" class="absolute text-amber-400 font-bold text-xl text-center leading-relaxed drop-shadow-[0_0_15px_rgba(251,191,36,0.8)]"></div>
+            </main>
+
+            <!-- 底部導航 -->
+            <div class="relative pb-10 flex flex-col items-center">
+                <div class="flex items-center justify-around w-full max-w-sm px-2 mb-4">
+                    <button onclick="app.goHome(event)" class="ui-btn w-14">返回</button>
+                    <button onclick="app.openModal('merit')" class="ui-btn w-14">功德</button>
+
+                    <div id="sun-trigger" class="sun-button">
+                        <svg viewBox="0 0 24 24" class="w-8 h-8 text-white/90 fill-current">
+                            <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-12.37a.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06c.39-.38.39-1.02 0-1.41zm-12.37 12.37l-1.06 1.06c-.39.39-.39 1.03 0 1.41a.996.996 0 001.41 0l1.06-1.06c.39-.39.39-1.03 0-1.41a.996.996 0 00-1.41 0z"></path>
+                        </svg>
+                    </div>
+
+                    <button onclick="app.openModal('dedication')" class="ui-btn w-14">迴向</button>
+                    <div class="flex flex-col">
+                        <button onclick="app.openModal('reset')" class="ui-btn w-14 !py-1 text-red-500/70">歸零</button>
+                        <button onclick="app.openModal('desc')" class="ui-btn w-14 !py-1">說明</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 彈窗群 -->
+    <div id="modal-complete" class="modal-overlay">
+        <div class="modal-content text-center">
+            <h2 class="text-amber-500 font-bold text-xl mb-2">功德圓滿</h2>
+            <p id="complete-msg" class="text-stone-300 text-sm mb-6"></p>
+            <button onclick="app.closeModal('complete')" class="w-full py-3 bg-amber-600/20 text-amber-500 rounded-xl font-bold mb-3">繼續修持</button>
+            <button onclick="app.handleDedicateExit()" class="w-full py-3 bg-white/5 text-stone-400 rounded-xl">離開迴向</button>
+        </div>
+    </div>
+
+    <div id="modal-merit" class="modal-overlay" onclick="app.closeModal('merit')">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h2 class="text-amber-500 font-bold text-lg mb-4 text-center">功德統計</h2>
+            <div id="merit-list" class="space-y-4 max-h-[300px] overflow-y-auto pr-2"></div>
+            <button onclick="app.closeModal('merit')" class="mt-6 w-full py-3 bg-amber-600/20 text-amber-500 rounded-xl font-bold">隨喜功德</button>
+        </div>
+    </div>
+
+    <div id="modal-dedication" class="modal-overlay" onclick="app.closeModal('dedication')">
+        <div class="modal-content text-center" onclick="event.stopPropagation()">
+            <h2 class="text-amber-500 font-bold text-lg mb-4">迴向偈</h2>
+            <div class="text-stone-300 text-sm leading-loose italic">
+                願以此功德，莊嚴佛淨土。<br>上報四重恩，下濟三途苦。<br>
+                若有見聞者，悉發菩提心。<br>盡此一報身，同生極樂國。
+            </div>
+            <button onclick="app.closeModal('dedication')" class="mt-8 w-full py-3 bg-amber-600/20 text-amber-500 rounded-xl font-bold">誠心迴向</button>
+        </div>
+    </div>
+
+    <div id="modal-desc" class="modal-overlay" onclick="app.closeModal('desc')">
+        <div class="modal-content text-stone-300 text-sm leading-relaxed" onclick="event.stopPropagation()">
+            <h2 class="text-amber-500 font-bold text-lg mb-4 text-center">修持說明</h2>
+            <p>1. 點擊螢幕任何處皆可記錄一聲聖號。<br>2. 咒輪每 108 遍文字將逐次點亮。<br>3. 阿彌陀佛修持對應「九品境界」，其餘為「階位」。<br>4. 數據自動儲存，歸零鍵僅重設當前聖號。</p>
+            <button onclick="app.closeModal('desc')" class="mt-6 w-full py-3 bg-amber-600/20 text-amber-500 rounded-xl font-bold">我知道了</button>
+        </div>
+    </div>
+
+    <div id="modal-reset" class="modal-overlay" onclick="app.closeModal('reset')">
+        <div class="modal-content text-center" onclick="event.stopPropagation()">
+            <h2 class="text-amber-500 font-bold text-lg mb-2">歸零確認</h2>
+            <p class="text-stone-300 text-sm mb-6">確定要將目前的修持記錄歸零嗎？</p>
+            <div class="flex gap-3">
+                <button onclick="app.closeModal('reset')" class="flex-1 py-3 bg-white/5 text-stone-400 rounded-xl">取消</button>
+                <button onclick="app.confirmReset()" class="flex-1 py-3 bg-red-900/20 text-red-500 rounded-xl font-bold">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const app = {
+            state: {
+                currentChant: '',
+                data: JSON.parse(localStorage.getItem('mantra_v2_data') || '{}'),
+                grades_9: ["下品下生", "下品中生", "下品上生", "中品下生", "中品中生", "中品上生", "上品下生", "上品中生", "上品上生", "蓮開見佛", "圓滿果位"]
+            },
+
+            select(name) {
+                this.state.currentChant = name;
+                if (!this.state.data[name]) this.state.data[name] = { today: 0, total: 0 };
+                document.getElementById('home-view').classList.add('hidden');
+                document.getElementById('practice-ui').classList.remove('hidden');
+                document.getElementById('centerMantra').innerText = name;
+                this.renderAllWheels();
+                this.updateUI();
+                this.notify(`已切換：${name}`);
+            },
+
+            handleInput(e) {
+                if (e.target.closest('.ui-btn') || e.target.closest('.modal-content') || e.target.closest('#home-view')) return;
+                this.count(e.clientX || (e.touches ? e.touches[0].clientX : 0), e.clientY || (e.touches ? e.touches[0].clientY : 0));
+            },
+
+            count(x, y) {
+                const chant = this.state.currentChant;
+                if (!chant) return;
+                const d = this.state.data[chant];
+                d.today++;
+                d.total++;
+                this.save();
+                this.createEffect(x, y);
+                this.updateUI();
+                this.updateWheelHighlight();
+                if (navigator.vibrate) navigator.vibrate(12);
+                if (d.today % 108 === 0) this.showCompletionModal();
+            },
+
+            updateUI() {
+                const chant = this.state.currentChant;
+                const d = this.state.data[chant];
+                document.getElementById('today-count').innerText = d.today;
+                document.getElementById('total-count').innerText = d.total;
+                const stage = Math.floor(d.total / 108);
+                const label = document.getElementById('grade-label');
+                const typeLabel = document.getElementById('grade-type');
+                if (chant === '南無阿彌陀佛') {
+                    label.innerText = this.state.grades_9[Math.min(stage, 10)];
+                    typeLabel.innerText = "九品往生修行錄";
+                } else {
+                    label.innerText = `第 ${stage + 1} 階`;
+                    typeLabel.innerText = "修持功德階位";
+                }
+            },
+
+            updateWheelHighlight() {
+                const chant = this.state.currentChant;
+                const progress = ((this.state.data[chant].today - 1) % 108) + 1;
+                const nameLen = chant.length;
+                ['wheel-outer', 'wheel-mid', 'wheel-inner'].forEach(id => {
+                    const wheel = document.getElementById(id);
+                    const units = wheel.querySelectorAll('.chant-unit');
+                    const totalGroups = units.length / nameLen;
+                    const numToLight = Math.ceil((progress / 108) * totalGroups);
+                    units.forEach((u, i) => {
+                        const groupIdx = Math.floor(i / nameLen);
+                        u.classList.toggle('active-unit', groupIdx < numToLight);
+                    });
+                });
+            },
+
+            renderAllWheels() {
+                const chant = this.state.currentChant;
+                const len = chant.length;
+                this.createWheel('wheel-outer', 170, Math.floor(54 / len) * len);
+                this.createWheel('wheel-mid', 130, Math.floor(36 / len) * len);
+                this.createWheel('wheel-inner', 90, Math.floor(24 / len) * len);
+                this.updateWheelHighlight();
+            },
+
+            createWheel(id, radius, count) {
+                const wheel = document.getElementById(id);
+                wheel.innerHTML = '';
+                const mantra = this.state.currentChant;
+                for (let i = 0; i < count; i++) {
+                    const angle = (i / count) * 2 * Math.PI;
+                    const el = document.createElement('div');
+                    el.className = 'chant-unit';
+                    el.style.fontSize = radius > 100 ? '11px' : '13px';
+                    el.innerText = mantra[i % mantra.length];
+                    const tx = radius * Math.cos(angle);
+                    const ty = radius * Math.sin(angle);
+                    const rotation = (angle * 180 / Math.PI) + 90;
+                    // 在 JS 中固定住基礎位置，發光時只改變顏色
+                    el.style.transform = `translate(-50%, -50%) translate(${tx}px, ${ty}px) rotate(${rotation}deg)`;
+                    wheel.appendChild(el);
+                }
+            },
+
+            confirmReset() {
+                const chant = this.state.currentChant;
+                this.state.data[chant].today = 0;
+                this.state.data[chant].total = 0;
+                this.save(); this.updateUI(); this.updateWheelHighlight();
+                this.closeModal('reset');
+                this.notify('記錄已歸零');
+            },
+
+            showCompletionModal() {
+                const chant = this.state.currentChant;
+                const stage = Math.floor(this.state.data[chant].today / 108);
+                document.getElementById('complete-msg').innerText = `已圓滿：第 ${stage} 次 108 遍`;
+                document.getElementById('modal-complete').style.display = 'flex';
+            },
+
+            createEffect(x, y) {
+                const ripple = document.createElement('div');
+                ripple.className = 'ripple'; ripple.style.left = x + 'px'; ripple.style.top = y + 'px';
+                document.body.appendChild(ripple);
+                const flash = document.createElement('div');
+                flash.className = 'sun-flash'; flash.style.left = x + 'px'; flash.style.top = y + 'px';
+                document.body.appendChild(flash);
+                setTimeout(() => { ripple.remove(); flash.remove(); }, 1500);
+            },
+
+            save() { localStorage.setItem('mantra_v2_data', JSON.stringify(this.state.data)); },
+            handleDedicateExit() { this.closeModal('complete'); this.openModal('dedication'); setTimeout(() => { this.closeModal('dedication'); this.goHome(); }, 4000); },
+            openModal(t) { document.getElementById(`modal-${t}`).style.display = 'flex'; if(t==='merit') this.renderMerit(); },
+            closeModal(t) { document.getElementById(`modal-${t}`).style.display = 'none'; },
+            renderMerit() {
+                const list = document.getElementById('merit-list'); list.innerHTML = '';
+                Object.entries(this.state.data).forEach(([n, d]) => {
+                    if(d.total===0) return;
+                    list.innerHTML += `<div class="flex justify-between bg-white/5 p-4 rounded-xl mb-2"><div class="text-amber-500 font-bold">${n}</div><div>${d.total}</div></div>`;
+                });
+                if(!list.innerHTML) list.innerHTML = '<div class="text-center text-stone-600 py-10">尚無記錄</div>';
+            },
+            goHome() { document.getElementById('home-view').classList.remove('hidden'); document.getElementById('practice-ui').classList.add('hidden'); },
+            notify(m) { const n = document.getElementById('notification'); n.innerText = m; n.classList.add('show'); setTimeout(() => n.classList.remove('show'), 3000); }
+        };
+        document.body.addEventListener('touchmove', (e) => { if(!e.target.closest('.modal-content') && !e.target.closest('#merit-list')) e.preventDefault(); }, { passive: false });
+    </script>
+</body>
+</html>
+
